@@ -50,6 +50,18 @@ CHAT_3 = -1001234567892
 CHAT_REPLY_ONLY = -1001234567893
 
 
+@pytest.fixture(autouse=True)
+def _frozen_policy_clock(monkeypatch):
+    """Pin the policy clock one hour after NOW.
+
+    These scenarios are built around the fixed NOW above, while act_dispatch_post
+    reads the real clock through policy.utcnow(). Approvals expire after 24 hours,
+    so without a pinned clock every test that dispatches a post approved at NOW
+    starts failing once the wall clock is a day past it.
+    """
+    monkeypatch.setattr(policy, "utcnow", lambda: NOW + timedelta(hours=1))
+
+
 @pytest.fixture
 def env_paths(tmp_path, monkeypatch):
     cfg_path = tmp_path / "act_config.json"
