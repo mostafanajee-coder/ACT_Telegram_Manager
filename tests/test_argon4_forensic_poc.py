@@ -24,6 +24,7 @@ Verifies:
 10. CLI interactive/non-interactive approval, UTF-8 Arabic output, and
     atomic config initialization.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -80,7 +81,9 @@ def env_paths(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_f01_presend_failures_rollback_to_approved_and_preserve_quota(env_paths, monkeypatch):
+async def test_f01_presend_failures_rollback_to_approved_and_preserve_quota(
+    env_paths, monkeypatch
+):
     """When account mismatch, bot account, entity resolution error, or peer mismatch
     occurs before client.send_message(), the post rolls back to 'approved', preserves
     the exact PolicyError message, and does not consume daily ad quota.
@@ -200,7 +203,9 @@ async def test_f02_cancelled_error_finalizes_as_uncertain(env_paths):
     assert post["sent_utc"] is not None
 
 
-@pytest.mark.parametrize("cancel_at", ["ensure_connected", "get_me", "resolve_entity", "get_messages"])
+@pytest.mark.parametrize(
+    "cancel_at", ["ensure_connected", "get_me", "resolve_entity", "get_messages"]
+)
 @pytest.mark.asyncio
 async def test_r01_preflight_cancellation_restores_approved_without_sending(
     env_paths, monkeypatch, cancel_at
@@ -335,7 +340,11 @@ async def test_r01_cancellation_after_send_begins_stays_uncertain_and_nonretryab
 async def test_send_phase_policy_error_is_also_uncertain_and_nonretryable(env_paths):
     cfg_path, db_path = env_paths
     draft = policy.prepare(
-        chat_id=CHAT_1, kind="ad", content="Ambiguous policy error", config_path=cfg_path, db_path=db_path
+        chat_id=CHAT_1,
+        kind="ad",
+        content="Ambiguous policy error",
+        config_path=cfg_path,
+        db_path=db_path,
     )
     policy.approve(draft["id"], db_path=db_path)
 
@@ -343,14 +352,18 @@ async def test_send_phase_policy_error_is_also_uncertain_and_nonretryable(env_pa
         raise policy.PolicyError("transport wrapper failed after send invocation")
 
     with pytest.raises(policy.PolicyError, match="uncertain"):
-        await policy.execute(draft["id"], sender_after_send_begins, config_path=cfg_path, db_path=db_path)
+        await policy.execute(
+            draft["id"], sender_after_send_begins, config_path=cfg_path, db_path=db_path
+        )
     assert policy.get_post(draft["id"], db_path=db_path)["status"] == "uncertain"
 
 
 @pytest.mark.asyncio
 async def test_scheduled_dispatch_passes_telethon_schedule_in_mock(env_paths, monkeypatch):
     cfg_path, db_path = env_paths
-    scheduled_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(timespec="seconds")
+    scheduled_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(
+        timespec="seconds"
+    )
     draft = policy.prepare(
         chat_id=CHAT_1,
         kind="ad",
@@ -592,7 +605,9 @@ async def test_f04_sqlite_tampering_detected_and_refused(env_paths):
         return 1
 
     with pytest.raises(policy.PolicyError, match="integrity check failed"):
-        await policy.execute(draft["id"], dummy_send, config_path=cfg_path, db_path=db_path, now=NOW)
+        await policy.execute(
+            draft["id"], dummy_send, config_path=cfg_path, db_path=db_path, now=NOW
+        )
 
     # Restore content, tamper with schedule_utc (keeping fingerprint unchanged!)
     conn = sqlite3.connect(db_path)
@@ -604,7 +619,9 @@ async def test_f04_sqlite_tampering_detected_and_refused(env_paths):
     conn.close()
 
     with pytest.raises(policy.PolicyError, match="integrity check failed"):
-        await policy.execute(draft["id"], dummy_send, config_path=cfg_path, db_path=db_path, now=NOW)
+        await policy.execute(
+            draft["id"], dummy_send, config_path=cfg_path, db_path=db_path, now=NOW
+        )
 
 
 @pytest.mark.asyncio
@@ -612,7 +629,12 @@ async def test_f04_approval_ttl_expiration(env_paths):
     """Unscheduled approvals expire after 24 hours if not dispatched."""
     cfg_path, db_path = env_paths
     draft = policy.prepare(
-        chat_id=CHAT_1, kind="ad", content="Time-bounded Ad", config_path=cfg_path, db_path=db_path, now=NOW
+        chat_id=CHAT_1,
+        kind="ad",
+        content="Time-bounded Ad",
+        config_path=cfg_path,
+        db_path=db_path,
+        now=NOW,
     )
     policy.approve(draft["id"], db_path=db_path, now=NOW)
 
@@ -645,7 +667,11 @@ def test_f05_terminal_escape_and_bidi_injection_rejected(env_paths):
     ):
         with pytest.raises(policy.PolicyError):
             policy.prepare(
-                chat_id=CHAT_1, kind="ad", content=bad_payload, config_path=cfg_path, db_path=db_path
+                chat_id=CHAT_1,
+                kind="ad",
+                content=bad_payload,
+                config_path=cfg_path,
+                db_path=db_path,
             )
 
 
@@ -662,7 +688,12 @@ async def test_f07_duplicate_detection_normalizes_whitespace_and_checks_sent_tim
     t_send = NOW - timedelta(hours=2)
 
     d1 = policy.prepare(
-        chat_id=CHAT_1, kind="ad", content="Promo Offer", config_path=cfg_path, db_path=db_path, now=t_create
+        chat_id=CHAT_1,
+        kind="ad",
+        content="Promo Offer",
+        config_path=cfg_path,
+        db_path=db_path,
+        now=t_create,
     )
     policy.approve(d1["id"], db_path=db_path, now=t_send)
 
@@ -835,7 +866,9 @@ async def test_riyadh_midnight_boundary_exact_seconds(env_paths):
     )
     policy.approve(d_midnight["id"], db_path=db_path, now=NOW)
     with pytest.raises(policy.PolicyError, match="60 minutes"):
-        await policy.execute(d_midnight["id"], ok_sender, config_path=cfg_path, db_path=db_path, now=NOW)
+        await policy.execute(
+            d_midnight["id"], ok_sender, config_path=cfg_path, db_path=db_path, now=NOW
+        )
 
     # At 01:00:00+03:00 (60m01s later), both spacing and new Riyadh day quota allow it
     d_next_day = policy.prepare(
@@ -848,5 +881,7 @@ async def test_riyadh_midnight_boundary_exact_seconds(env_paths):
         now=NOW,
     )
     policy.approve(d_next_day["id"], db_path=db_path, now=NOW)
-    res = await policy.execute(d_next_day["id"], ok_sender, config_path=cfg_path, db_path=db_path, now=NOW)
+    res = await policy.execute(
+        d_next_day["id"], ok_sender, config_path=cfg_path, db_path=db_path, now=NOW
+    )
     assert res["status"] == "scheduled"

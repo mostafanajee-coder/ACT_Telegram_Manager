@@ -2,6 +2,7 @@
 
 No real ACL, user, or service is modified. Junctions are created inside tmp_path only.
 """
+
 import json
 import os
 import subprocess
@@ -19,7 +20,9 @@ def test_regress_db_parent_junction_is_refused(act_paths, tmp_path):
     real = tmp_path / "elsewhere"
     real.mkdir()
     link = tmp_path / "junction_data"
-    r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(real)], capture_output=True, text=True)
+    r = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(real)], capture_output=True, text=True
+    )
     if r.returncode != 0:
         pytest.skip("mklink /J unavailable: " + r.stderr)
     assert not link.is_symlink()  # Python 3.11: junction is not reported as symlink
@@ -39,5 +42,8 @@ def test_evidence_act_data_acl_is_inherited_not_hardened(act_paths):
     report = os.environ.get("OPUS55_MATRIX_OUT")
     if report:
         with open(report, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"case": "NTFS ACL of new posts.sqlite3 (tmp)", "icacls": out.strip()}) + "\n")
+            fh.write(
+                json.dumps({"case": "NTFS ACL of new posts.sqlite3 (tmp)", "icacls": out.strip()})
+                + "\n"
+            )
     assert "(I)" in out  # every ACE inherited; no explicit protection applied by the code

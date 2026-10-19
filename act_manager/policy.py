@@ -16,6 +16,7 @@ All policy rules are enforced in code before any Telegram network call:
   configuration or identity errors before `send_message()` do not corrupt state
   to `uncertain` or exhaust daily advertisement quota.
 """
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -42,8 +43,7 @@ MAX_APPROVAL_AGE = timedelta(hours=24)
 
 # Control chars (excluding \n and \t in message bodies) and Unicode bidi/spoofing controls
 _FORBIDDEN_CONTROL_RE = re.compile(
-    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f"
-    r"\u200e\u200f\u202a-\u202e\u2066-\u2069\u061c]"
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f" r"\u200e\u200f\u202a-\u202e\u2066-\u2069\u061c]"
 )
 _ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200d\ufeff\u2060]")
 
@@ -76,11 +76,15 @@ def sanitize_terminal_text(value: str) -> str:
     return _FORBIDDEN_CONTROL_RE.sub("\ufffd", cleaned)
 
 
-def _validate_safe_text(value: str, *, field_name: str = "Content", allow_newlines: bool = True) -> None:
+def _validate_safe_text(
+    value: str, *, field_name: str = "Content", allow_newlines: bool = True
+) -> None:
     if not isinstance(value, str):
         raise PolicyError(f"{field_name} must be a string.")
     if "\r" in value:
-        raise PolicyError(f"{field_name} must not contain carriage-return (CR) control characters.")
+        raise PolicyError(
+            f"{field_name} must not contain carriage-return (CR) control characters."
+        )
     if not allow_newlines and ("\n" in value or "\t" in value):
         raise PolicyError(f"{field_name} must be a single line without tabs or newlines.")
     if _FORBIDDEN_CONTROL_RE.search(value):
@@ -117,9 +121,7 @@ def compute_fingerprint(
         binding = ["private_user", recipient_user_id, kind, reply_to, norm_content]
     else:
         raise PolicyError("Unknown destination type.")
-    return hashlib.sha256(
-        json.dumps(binding, ensure_ascii=False).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(binding, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def compute_integrity_hash(
@@ -140,7 +142,15 @@ def compute_integrity_hash(
         binding = [draft_id, chat_id, kind, reply_to, content, schedule_utc]
     elif destination_type == "private_user":
         recipient_user_id = _strict_user_id(recipient_user_id)
-        binding = [draft_id, "private_user", recipient_user_id, kind, reply_to, content, schedule_utc]
+        binding = [
+            draft_id,
+            "private_user",
+            recipient_user_id,
+            kind,
+            reply_to,
+            content,
+            schedule_utc,
+        ]
     else:
         raise PolicyError("Unknown destination type.")
     return hashlib.sha256(
@@ -162,7 +172,9 @@ def parse_time(value: str | None, *, now: datetime | None = None) -> datetime | 
     try:
         parsed = _dt(value.strip())
     except (TypeError, ValueError) as exc:
-        raise PolicyError("Use a full ISO date/time with timezone, e.g. 2026-10-19T11:00:00+03:00") from exc
+        raise PolicyError(
+            "Use a full ISO date/time with timezone, e.g. 2026-10-19T11:00:00+03:00"
+        ) from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise PolicyError("Timezone is mandatory (+03:00 for Riyadh).")
     now = now or utcnow()
@@ -308,7 +320,9 @@ def _db(path: Path | None = None):
     if "recipient_user_id" not in cols:
         db.execute("ALTER TABLE posts ADD COLUMN recipient_user_id INTEGER")
     db.execute("CREATE INDEX IF NOT EXISTS posts_time_idx ON posts(kind,status,planned_utc)")
-    db.execute("CREATE INDEX IF NOT EXISTS posts_fingerprint_idx ON posts(fingerprint,created_utc)")
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS posts_fingerprint_idx ON posts(fingerprint,created_utc)"
+    )
     # This schema never defines triggers or views. One found here was planted
     # outside policy and could rewrite rows after verification; refuse to use it.
     unexpected = db.execute(
@@ -345,8 +359,12 @@ def _verify_row_integrity(row: sqlite3.Row | dict) -> None:
     else:
         raise PolicyError("Draft has an unknown destination type.")
     expected_fp = compute_fingerprint(
-        r["chat_id"], r["kind"], r["reply_to"], r["content"],
-        destination_type=destination_type, recipient_user_id=recipient_user_id,
+        r["chat_id"],
+        r["kind"],
+        r["reply_to"],
+        r["content"],
+        destination_type=destination_type,
+        recipient_user_id=recipient_user_id,
     )
     if r.get("fingerprint") != expected_fp:
         raise PolicyError("Draft integrity check failed: post record was modified outside policy.")
@@ -358,19 +376,42 @@ def _verify_row_integrity(row: sqlite3.Row | dict) -> None:
             "Draft integrity check failed: integrity hash missing; create a new draft."
         )
     expected_ih = compute_integrity_hash(
-        r["id"], r["chat_id"], r["kind"], r["reply_to"], r["content"], r.get("schedule_utc"),
-        destination_type=destination_type, recipient_user_id=recipient_user_id,
+        r["id"],
+        r["chat_id"],
+        r["kind"],
+        r["reply_to"],
+        r["content"],
+        r.get("schedule_utc"),
+        destination_type=destination_type,
+        recipient_user_id=recipient_user_id,
     )
     if stored_ih != expected_ih:
-        raise PolicyError("Draft integrity check failed: post fields or schedule were tampered with.")
+        raise PolicyError(
+            "Draft integrity check failed: post fields or schedule were tampered with."
+        )
 
 
 def _preview(row: sqlite3.Row | dict) -> dict:
     r = dict(row)
-    preview = {k: r.get(k) for k in (
-        "id", "chat_id", "destination_type", "recipient_user_id", "kind", "reply_to", "content", "schedule_utc",
-        "status", "created_utc", "approved_utc", "sent_utc", "external_id", "error"
-    )}
+    preview = {
+        k: r.get(k)
+        for k in (
+            "id",
+            "chat_id",
+            "destination_type",
+            "recipient_user_id",
+            "kind",
+            "reply_to",
+            "content",
+            "schedule_utc",
+            "status",
+            "created_utc",
+            "approved_utc",
+            "sent_utc",
+            "external_id",
+            "error",
+        )
+    }
     if "destination_type" not in r:
         preview["destination_type"] = "group"
     if preview.get("destination_type") == "private_user":
@@ -378,10 +419,19 @@ def _preview(row: sqlite3.Row | dict) -> dict:
     return preview
 
 
-def prepare(*, chat_id: int | None, kind: str, content: str, reply_to: int | None = None,
-            schedule_at: str | None = None, config_path: Path | None = None,
-            db_path: Path | None = None, now: datetime | None = None,
-            destination_type: str = "group", recipient_user_id: int | None = None) -> dict:
+def prepare(
+    *,
+    chat_id: int | None,
+    kind: str,
+    content: str,
+    reply_to: int | None = None,
+    schedule_at: str | None = None,
+    config_path: Path | None = None,
+    db_path: Path | None = None,
+    now: datetime | None = None,
+    destination_type: str = "group",
+    recipient_user_id: int | None = None,
+) -> dict:
     if destination_type not in ("group", "private_user"):
         raise PolicyError("destination_type must be 'group' or 'private_user'.")
     config = load_config(config_path, require_identity=(destination_type == "private_user"))
@@ -423,13 +473,23 @@ def prepare(*, chat_id: int | None, kind: str, content: str, reply_to: int | Non
     planned = schedule or now
     schedule_iso = _iso(schedule) if schedule else None
     fingerprint = compute_fingerprint(
-        stored_chat_id, kind, reply_to, content,
-        destination_type=destination_type, recipient_user_id=recipient_user_id,
+        stored_chat_id,
+        kind,
+        reply_to,
+        content,
+        destination_type=destination_type,
+        recipient_user_id=recipient_user_id,
     )
     draft_id = secrets.token_hex(8)
     integrity_hash = compute_integrity_hash(
-        draft_id, stored_chat_id, kind, reply_to, content, schedule_iso,
-        destination_type=destination_type, recipient_user_id=recipient_user_id,
+        draft_id,
+        stored_chat_id,
+        kind,
+        reply_to,
+        content,
+        schedule_iso,
+        destination_type=destination_type,
+        recipient_user_id=recipient_user_id,
     )
     open_limit = config.get("max_open_drafts")
     with _db(db_path) as db:
@@ -447,8 +507,21 @@ def prepare(*, chat_id: int | None, kind: str, content: str, reply_to: int | Non
             """INSERT INTO posts (id,chat_id,destination_type,recipient_user_id,kind,reply_to,content,
                fingerprint,integrity_hash,schedule_utc,planned_utc,status,created_utc)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (draft_id, stored_chat_id, destination_type, recipient_user_id, kind, reply_to,
-             content, fingerprint, integrity_hash, schedule_iso, _iso(planned), "draft", _iso(now))
+            (
+                draft_id,
+                stored_chat_id,
+                destination_type,
+                recipient_user_id,
+                kind,
+                reply_to,
+                content,
+                fingerprint,
+                integrity_hash,
+                schedule_iso,
+                _iso(planned),
+                "draft",
+                _iso(now),
+            ),
         )
         db.commit()
     return get_post(draft_id, db_path=db_path)
@@ -466,13 +539,20 @@ def list_posts(db_path: Path | None = None, limit: int = 20) -> list[dict]:
     if type(limit) is not int or not 1 <= limit <= 50:
         raise PolicyError("limit must be 1..50")
     with _db(db_path) as db:
-        rows = db.execute("SELECT * FROM posts ORDER BY created_utc DESC LIMIT ?", (limit,)).fetchall()
+        rows = db.execute(
+            "SELECT * FROM posts ORDER BY created_utc DESC LIMIT ?", (limit,)
+        ).fetchall()
     return [_preview(r) for r in rows]
 
 
-def approve(draft_id: str, *, db_path: Path | None = None,
-            now: datetime | None = None, expected_fingerprint: str | None = None,
-            expected_integrity: str | None = None) -> dict:
+def approve(
+    draft_id: str,
+    *,
+    db_path: Path | None = None,
+    now: datetime | None = None,
+    expected_fingerprint: str | None = None,
+    expected_integrity: str | None = None,
+) -> dict:
     effective_now = now or utcnow()
     with _db(db_path) as db:
         db.execute("BEGIN IMMEDIATE")
@@ -490,8 +570,10 @@ def approve(draft_id: str, *, db_path: Path | None = None,
             planned = _dt(row["schedule_utc"])
             if planned < now + timedelta(seconds=75):
                 raise PolicyError("Scheduled time is too near/past; create a new draft.")
-        db.execute("UPDATE posts SET status='approved',approved_utc=? WHERE id=?",
-                   (_iso(effective_now), draft_id))
+        db.execute(
+            "UPDATE posts SET status='approved',approved_utc=? WHERE id=?",
+            (_iso(effective_now), draft_id),
+        )
         db.commit()
     return get_post(draft_id, db_path=db_path)
 
@@ -501,16 +583,19 @@ def cancel(draft_id: str, *, db_path: Path | None = None) -> dict:
         db.execute("BEGIN IMMEDIATE")
         changed = db.execute(
             "UPDATE posts SET status='cancelled',error='Cancelled by operator' WHERE id=? AND status IN ('draft','approved')",
-            (draft_id,)
+            (draft_id,),
         )
         if changed.rowcount != 1:
-            raise PolicyError("Only a pending draft can be cancelled. Scheduled messages must be cancelled inside Telegram.")
+            raise PolicyError(
+                "Only a pending draft can be cancelled. Scheduled messages must be cancelled inside Telegram."
+            )
         db.commit()
     return get_post(draft_id, db_path=db_path)
 
 
-def _check_quota(db: sqlite3.Connection, row: sqlite3.Row, config: dict,
-                 now: datetime) -> datetime:
+def _check_quota(
+    db: sqlite3.Connection, row: sqlite3.Row, config: dict, now: datetime
+) -> datetime:
     planned = _dt(row["schedule_utc"]) if row["schedule_utc"] else now
     # A scheduled post cannot be sent to Telegram after its target time.
     if row["schedule_utc"] and planned < now + timedelta(seconds=75):
@@ -518,10 +603,8 @@ def _check_quota(db: sqlite3.Connection, row: sqlite3.Row, config: dict,
     if row["kind"] != "ad":
         return planned
     day = planned.astimezone(RIYADH).date()
-    reservations = db.execute(
-        """SELECT id,planned_utc FROM posts
-           WHERE kind='ad' AND status IN ('sending','sent','scheduled','uncertain')"""
-    ).fetchall()
+    reservations = db.execute("""SELECT id,planned_utc FROM posts
+           WHERE kind='ad' AND status IN ('sending','sent','scheduled','uncertain')""").fetchall()
     same_day = 0
     for item in reservations:
         item_time = _dt(item["planned_utc"])
@@ -534,8 +617,13 @@ def _check_quota(db: sqlite3.Connection, row: sqlite3.Row, config: dict,
     return planned
 
 
-def reserve(draft_id: str, *, config_path: Path | None = None,
-            db_path: Path | None = None, now: datetime | None = None) -> dict:
+def reserve(
+    draft_id: str,
+    *,
+    config_path: Path | None = None,
+    db_path: Path | None = None,
+    now: datetime | None = None,
+) -> dict:
     config = load_config(config_path, require_identity=True)
     now = now or utcnow()
     with _db(db_path) as db:
@@ -570,20 +658,36 @@ def reserve(draft_id: str, *, config_path: Path | None = None,
                status IN ('sending','sent','scheduled','uncertain') AND
                (created_utc>=? OR planned_utc>=? OR (sent_utc IS NOT NULL AND sent_utc>=?))
                LIMIT 1""",
-            (row["fingerprint"], row["id"], window_start, window_start, window_start)
+            (row["fingerprint"], row["id"], window_start, window_start, window_start),
         ).fetchone()
         if other:
-            raise PolicyError("Potential duplicate for this destination within 24h. Create new content later.")
+            raise PolicyError(
+                "Potential duplicate for this destination within 24h. Create new content later."
+            )
         planned = _check_quota(db, row, config, now)
-        db.execute("UPDATE posts SET status='sending',planned_utc=?,error=NULL WHERE id=?",
-                   (_iso(planned), draft_id))
+        db.execute(
+            "UPDATE posts SET status='sending',planned_utc=?,error=NULL WHERE id=?",
+            (_iso(planned), draft_id),
+        )
         # Hand the sender exactly the row that was verified, read back inside this
         # same transaction, instead of a later read on a new connection.
         after = db.execute("SELECT * FROM posts WHERE id=?", (draft_id,)).fetchone()
-        immutable = ("id", "chat_id", "destination_type", "recipient_user_id", "kind",
-                     "reply_to", "content", "fingerprint", "integrity_hash", "schedule_utc")
-        if after is None or after["status"] != "sending" or any(
-            after[k] != row[k] for k in immutable
+        immutable = (
+            "id",
+            "chat_id",
+            "destination_type",
+            "recipient_user_id",
+            "kind",
+            "reply_to",
+            "content",
+            "fingerprint",
+            "integrity_hash",
+            "schedule_utc",
+        )
+        if (
+            after is None
+            or after["status"] != "sending"
+            or any(after[k] != row[k] for k in immutable)
         ):
             raise PolicyError("Draft changed during reservation; no message attempted.")
         _verify_row_integrity(after)
@@ -598,7 +702,7 @@ def unreserve(draft_id: str, *, error: str | None = None, db_path: Path | None =
         changed = db.execute(
             """UPDATE posts SET status='approved',error=?
                WHERE id=? AND status='sending'""",
-            ((error or "")[:200] if error else None, draft_id)
+            ((error or "")[:200] if error else None, draft_id),
         )
         if changed.rowcount != 1:
             raise PolicyError("Cannot unreserve a post that is not in sending state.")
@@ -606,8 +710,14 @@ def unreserve(draft_id: str, *, error: str | None = None, db_path: Path | None =
     return get_post(draft_id, db_path=db_path)
 
 
-def finalize(draft_id: str, *, status: str, external_id: int | None = None,
-             error: str | None = None, db_path: Path | None = None) -> dict:
+def finalize(
+    draft_id: str,
+    *,
+    status: str,
+    external_id: int | None = None,
+    error: str | None = None,
+    db_path: Path | None = None,
+) -> dict:
     if status not in ("sent", "scheduled", "uncertain"):
         raise PolicyError("Invalid final status.")
     with _db(db_path) as db:
@@ -615,8 +725,13 @@ def finalize(draft_id: str, *, status: str, external_id: int | None = None,
         changed = db.execute(
             """UPDATE posts SET status=?,external_id=?,sent_utc=?,error=?
                WHERE id=? AND status='sending'""",
-            (status, external_id, _iso(utcnow()),
-             (error or "")[:200] if status == "uncertain" else None, draft_id)
+            (
+                status,
+                external_id,
+                _iso(utcnow()),
+                (error or "")[:200] if status == "uncertain" else None,
+                draft_id,
+            ),
         )
         if changed.rowcount != 1:
             raise PolicyError("Cannot finalize a post that is not in sending state.")
@@ -663,10 +778,14 @@ async def execute(
             raise
 
     try:
-        msg_id = await sender(reserved, prepared) if preflight is not None else await sender(reserved)
+        msg_id = (
+            await sender(reserved, prepared) if preflight is not None else await sender(reserved)
+        )
     except BaseException as exc:
         finalize(draft_id, status="uncertain", error=type(exc).__name__, db_path=db_path)
-        raise PolicyError("Send outcome uncertain; do NOT retry. Check Telegram and local audit.") from exc
+        raise PolicyError(
+            "Send outcome uncertain; do NOT retry. Check Telegram and local audit."
+        ) from exc
     try:
         return finalize(
             draft_id,

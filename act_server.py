@@ -3,14 +3,15 @@
 Preferred entrypoint for managed use: act_server.py. Legacy main.py,
 telegram_mcp.server, and console script are also gated by restrict_tools().
 """
+
 from __future__ import annotations
 
 import os
 import sys
 
-ALLOWED = frozenset({
-    "act_policy", "act_prepare_post", "act_get_post", "act_list_posts", "act_dispatch_post"
-})
+ALLOWED = frozenset(
+    {"act_policy", "act_prepare_post", "act_get_post", "act_list_posts", "act_dispatch_post"}
+)
 
 
 def restrict_tools(server) -> set[str]:
@@ -46,8 +47,9 @@ def main() -> None:
     from telegram_mcp import runner
     from telegram_mcp.runtime import mcp
     import act_manager.tools  # noqa: F401: registers ACT tools
+
     exposed = restrict_tools(mcp)
-    os.environ["TELEGRAM_EXPOSED_TOOLS"] = "all"   # only five ACT tools remain
+    os.environ["TELEGRAM_EXPOSED_TOOLS"] = "all"  # only five ACT tools remain
     os.environ["MCP_TRANSPORT"] = "stdio"
     print(f"ACT safe MCP tools only: {', '.join(sorted(exposed))}", file=sys.stderr)
     runner.main()

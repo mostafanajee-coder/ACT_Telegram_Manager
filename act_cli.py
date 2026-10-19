@@ -1,4 +1,5 @@
 """Local-only, operator-facing approvals. Never an MCP tool."""
+
 from __future__ import annotations
 import argparse
 import asyncio
@@ -20,18 +21,24 @@ def _ensure_utf8_stdio() -> None:
 async def _local_telegram_info(command: str) -> None:
     """Print metadata locally to the operator; never expose through MCP."""
     from telegram_mcp.runtime import get_client
+
     client = get_client()
     try:
         await client.connect()
         if not await client.is_user_authorized():
-            raise policy.PolicyError("Telegram session not authorized; complete upstream login first.")
+            raise policy.PolicyError(
+                "Telegram session not authorized; complete upstream login first."
+            )
         me = await client.get_me()
         if me is None or getattr(me, "bot", False):
-            raise policy.PolicyError("Personal user account required; bot accounts are not permitted.")
+            raise policy.PolicyError(
+                "Personal user account required; bot accounts are not permitted."
+            )
         print("Your Telegram user ID:", me.id)
         if command == "discover":
             print("Groups/channels (numeric IDs) -- no message content is fetched:")
             from telethon import utils
+
             async for dialog in client.iter_dialogs(limit=200):
                 if dialog.is_group or dialog.is_channel:
                     safe_name = policy.sanitize_terminal_text((dialog.name or "")[:100])
@@ -45,7 +52,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="ACT local approval and audit console")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init", help="Create empty deny-all config (no Telegram login)")
-    commands.add_parser("whoami", help="Show your own Telegram numeric account ID locally (requires login)")
+    commands.add_parser(
+        "whoami", help="Show your own Telegram numeric account ID locally (requires login)"
+    )
     commands.add_parser("discover", help="List group and channel IDs locally (requires login)")
     commands.add_parser("policy", help="Show configured destinations and limits")
     commands.add_parser("list", help="List local drafts and audit records")
@@ -60,7 +69,9 @@ def main(argv: list[str] | None = None) -> None:
                 raise policy.PolicyError("Configuration path must not be a symbolic link.")
             try:
                 with policy.CONFIG_PATH.open("x", encoding="utf-8") as fh:
-                    fh.write(json.dumps(policy.config_example(), ensure_ascii=False, indent=2) + "\n")
+                    fh.write(
+                        json.dumps(policy.config_example(), ensure_ascii=False, indent=2) + "\n"
+                    )
             except FileExistsError:
                 raise policy.PolicyError(
                     "Configuration already exists. Edit it manually; refusing to overwrite."
@@ -113,14 +124,23 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 raise policy.PolicyError("Unknown draft destination type.")
             expected_fp = policy.compute_fingerprint(
-                post["chat_id"], post["kind"], post["reply_to"], post["content"],
-                destination_type=destination_type, recipient_user_id=recipient_user_id,
+                post["chat_id"],
+                post["kind"],
+                post["reply_to"],
+                post["content"],
+                destination_type=destination_type,
+                recipient_user_id=recipient_user_id,
             )
             # Bind approval to destination identity, reply target, content and schedule.
             expected_ih = policy.compute_integrity_hash(
-                post["id"], post["chat_id"], post["kind"], post["reply_to"],
-                post["content"], post["schedule_utc"],
-                destination_type=destination_type, recipient_user_id=recipient_user_id,
+                post["id"],
+                post["chat_id"],
+                post["kind"],
+                post["reply_to"],
+                post["content"],
+                post["schedule_utc"],
+                destination_type=destination_type,
+                recipient_user_id=recipient_user_id,
             )
             safe_content = policy.sanitize_terminal_text(post["content"])
             print("\nLOCAL OPERATOR APPROVAL -- PREVIEW")

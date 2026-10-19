@@ -1,4 +1,5 @@
 """Offline tests for group reply policy and explicit private-user replies."""
+
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +17,6 @@ from telethon.tl.types import PeerUser, User
 import act_cli
 from act_manager import policy
 import act_manager.tools as act_tools
-
 
 GROUP_ID = -1001000000001
 ACCOUNT_ID = 7000001
@@ -37,13 +37,22 @@ def _user(user_id: int, *, username: str | None = None, bot: bool = False) -> Us
 
 
 def _config(path, *, ads_allowed: bool = False) -> None:
-    path.write_text(json.dumps({
-        "expected_user_id": ACCOUNT_ID,
-        "daily_ad_limit": 3,
-        "allowed_chats": [
-            {"chat_id": GROUP_ID, "label": "Synthetic Reply Group", "ads_allowed": ads_allowed}
-        ],
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "expected_user_id": ACCOUNT_ID,
+                "daily_ad_limit": 3,
+                "allowed_chats": [
+                    {
+                        "chat_id": GROUP_ID,
+                        "label": "Synthetic Reply Group",
+                        "ads_allowed": ads_allowed,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 @pytest.fixture
@@ -106,34 +115,51 @@ def _install_client(monkeypatch, client):
     monkeypatch.setattr(act_tools, "ensure_connected", already_connected)
 
 
-def _prepare_private(client, monkeypatch, *, username="alice", user_id=None,
-                     content="Thanks for contacting me.", reply_to=REPLY_ID):
+def _prepare_private(
+    client,
+    monkeypatch,
+    *,
+    username="alice",
+    user_id=None,
+    content="Thanks for contacting me.",
+    reply_to=REPLY_ID,
+):
     _install_client(monkeypatch, client)
-    return asyncio.run(act_tools.act_prepare_post(
-        chat_id=None,
-        kind="reply",
-        content=content,
-        reply_to=reply_to,
-        destination_type="private_user",
-        recipient_user_id=user_id,
-        recipient_username=username,
-    ))
+    return asyncio.run(
+        act_tools.act_prepare_post(
+            chat_id=None,
+            kind="reply",
+            content=content,
+            reply_to=reply_to,
+            destination_type="private_user",
+            recipient_user_id=user_id,
+            recipient_username=username,
+        )
+    )
 
 
 def _approve(post, db_path):
     fingerprint = policy.compute_fingerprint(
-        post["chat_id"], post["kind"], post["reply_to"], post["content"],
+        post["chat_id"],
+        post["kind"],
+        post["reply_to"],
+        post["content"],
         destination_type=post["destination_type"],
         recipient_user_id=post["recipient_user_id"],
     )
     integrity = policy.compute_integrity_hash(
-        post["id"], post["chat_id"], post["kind"], post["reply_to"],
-        post["content"], post["schedule_utc"],
+        post["id"],
+        post["chat_id"],
+        post["kind"],
+        post["reply_to"],
+        post["content"],
+        post["schedule_utc"],
         destination_type=post["destination_type"],
         recipient_user_id=post["recipient_user_id"],
     )
     return policy.approve(
-        post["id"], db_path=db_path,
+        post["id"],
+        db_path=db_path,
         expected_fingerprint=fingerprint,
         expected_integrity=integrity,
     )
@@ -156,15 +182,27 @@ def test_requested_group_is_the_only_destination_and_is_reply_only(act_paths):
         {"chat_id": GROUP_ID, "label": "Synthetic Reply Group", "ads_allowed": False}
     ]
     reply = policy.prepare(
-        chat_id=GROUP_ID, kind="reply", content="Answer", reply_to=4,
-        config_path=config_path, db_path=db_path,
+        chat_id=GROUP_ID,
+        kind="reply",
+        content="Answer",
+        reply_to=4,
+        config_path=config_path,
+        db_path=db_path,
     )
     assert reply["destination_type"] == "group"
     with pytest.raises(policy.PolicyError, match="Advertising not authorized"):
-        policy.prepare(chat_id=GROUP_ID, kind="ad", content="Promo", config_path=config_path, db_path=db_path)
+        policy.prepare(
+            chat_id=GROUP_ID, kind="ad", content="Promo", config_path=config_path, db_path=db_path
+        )
     with pytest.raises(policy.PolicyError, match="allowlist"):
-        policy.prepare(chat_id=-1001505872606, kind="reply", content="No", reply_to=5,
-                       config_path=config_path, db_path=db_path)
+        policy.prepare(
+            chat_id=-1001505872606,
+            kind="reply",
+            content="No",
+            reply_to=5,
+            config_path=config_path,
+            db_path=db_path,
+        )
     with pytest.raises(policy.PolicyError):
         policy._strict_chat_id(USER_ID)
 
@@ -202,14 +240,26 @@ def test_explicit_numeric_private_user_id_is_resolved_and_accepted(act_paths, mo
 def test_private_target_must_be_exactly_one_user_id_or_username(act_paths, monkeypatch):
     client = FakeTelegramClient(target=_user(USER_ID, username="alice"))
     _install_client(monkeypatch, client)
-    missing = asyncio.run(act_tools.act_prepare_post(
-        chat_id=None, kind="reply", content="Reply", reply_to=REPLY_ID,
-        destination_type="private_user",
-    ))
-    both = asyncio.run(act_tools.act_prepare_post(
-        chat_id=None, kind="reply", content="Reply", reply_to=REPLY_ID,
-        destination_type="private_user", recipient_user_id=USER_ID, recipient_username="alice",
-    ))
+    missing = asyncio.run(
+        act_tools.act_prepare_post(
+            chat_id=None,
+            kind="reply",
+            content="Reply",
+            reply_to=REPLY_ID,
+            destination_type="private_user",
+        )
+    )
+    both = asyncio.run(
+        act_tools.act_prepare_post(
+            chat_id=None,
+            kind="reply",
+            content="Reply",
+            reply_to=REPLY_ID,
+            destination_type="private_user",
+            recipient_user_id=USER_ID,
+            recipient_username="alice",
+        )
+    )
     assert missing["ok"] is False and both["ok"] is False
     assert client.entity_calls == []
 
@@ -249,7 +299,9 @@ def test_numeric_private_id_must_match_resolved_telegram_user(act_paths, monkeyp
     assert not act_paths[1].exists()
 
 
-def test_private_target_resolution_requires_the_configured_personal_account(act_paths, monkeypatch):
+def test_private_target_resolution_requires_the_configured_personal_account(
+    act_paths, monkeypatch
+):
     client = FakeTelegramClient(target=_user(USER_ID, username="alice"), me=_user(ACCOUNT_ID + 1))
     result = _prepare_private(client, monkeypatch)
     assert result["ok"] is False
@@ -288,13 +340,16 @@ def test_private_dispatch_checks_only_the_selected_incoming_message(act_paths, m
     assert client.sent[0][2]["reply_to"] == REPLY_ID
 
 
-@pytest.mark.parametrize("message", [
-    None,
-    _incoming_message(user_id=OTHER_USER_ID),
-    _incoming_message(out=True),
-    _incoming_message(peer_id=OTHER_USER_ID),
-    _incoming_message(message_id=REPLY_ID + 1),
-])
+@pytest.mark.parametrize(
+    "message",
+    [
+        None,
+        _incoming_message(user_id=OTHER_USER_ID),
+        _incoming_message(out=True),
+        _incoming_message(peer_id=OTHER_USER_ID),
+        _incoming_message(message_id=REPLY_ID + 1),
+    ],
+)
 def test_private_dispatch_refuses_missing_or_wrong_message(act_paths, monkeypatch, message):
     target = _user(USER_ID, username="alice")
     client = FakeTelegramClient(target=target, message=message)
@@ -356,39 +411,61 @@ def test_cancelled_private_reply_cannot_be_dispatched(act_paths, monkeypatch):
 
 
 def test_private_destination_rejects_ads_and_scheduling(act_paths):
-    common = {"chat_id": None, "destination_type": "private_user", "recipient_user_id": USER_ID,
-              "content": "One reply", "config_path": act_paths[0], "db_path": act_paths[1]}
+    common = {
+        "chat_id": None,
+        "destination_type": "private_user",
+        "recipient_user_id": USER_ID,
+        "content": "One reply",
+        "config_path": act_paths[0],
+        "db_path": act_paths[1],
+    }
     with pytest.raises(policy.PolicyError, match="replies only"):
         policy.prepare(**common, kind="ad")
     with pytest.raises(policy.PolicyError, match="cannot be scheduled"):
-        policy.prepare(**common, kind="reply", reply_to=REPLY_ID,
-                       schedule_at="2026-10-19T12:00:00+03:00")
+        policy.prepare(
+            **common, kind="reply", reply_to=REPLY_ID, schedule_at="2026-10-19T12:00:00+03:00"
+        )
 
 
 def test_private_cli_approval_phrase_binds_recipient_and_draft(act_paths, monkeypatch):
     post = policy.prepare(
-        chat_id=None, kind="reply", content="One private response", reply_to=REPLY_ID,
-        destination_type="private_user", recipient_user_id=USER_ID,
-        config_path=act_paths[0], db_path=act_paths[1],
+        chat_id=None,
+        kind="reply",
+        content="One private response",
+        reply_to=REPLY_ID,
+        destination_type="private_user",
+        recipient_user_id=USER_ID,
+        config_path=act_paths[0],
+        db_path=act_paths[1],
     )
     monkeypatch.setattr(policy, "CONFIG_PATH", act_paths[0])
     monkeypatch.setattr(policy, "DATA_PATH", act_paths[1])
     fake_stdin = io.StringIO()
     fake_stdin.isatty = lambda: True
     monkeypatch.setattr(sys, "stdin", fake_stdin)
-    monkeypatch.setattr(builtins, "input", lambda _prompt="": f"APPROVE PRIVATE {OTHER_USER_ID} {post['id']}")
+    monkeypatch.setattr(
+        builtins, "input", lambda _prompt="": f"APPROVE PRIVATE {OTHER_USER_ID} {post['id']}"
+    )
     with pytest.raises(SystemExit):
         act_cli.main(["approve", post["id"]])
     assert policy.get_post(post["id"], db_path=act_paths[1])["status"] == "draft"
-    monkeypatch.setattr(builtins, "input", lambda _prompt="": f"APPROVE PRIVATE {USER_ID} {post['id']}")
+    monkeypatch.setattr(
+        builtins, "input", lambda _prompt="": f"APPROVE PRIVATE {USER_ID} {post['id']}"
+    )
     act_cli.main(["approve", post["id"]])
     assert policy.get_post(post["id"], db_path=act_paths[1])["status"] == "approved"
 
 
-def test_no_ads_group_reply_requires_reply_specific_cli_confirmation(act_paths, monkeypatch, capsys):
+def test_no_ads_group_reply_requires_reply_specific_cli_confirmation(
+    act_paths, monkeypatch, capsys
+):
     post = policy.prepare(
-        chat_id=GROUP_ID, kind="reply", content="Answer the question", reply_to=19,
-        config_path=act_paths[0], db_path=act_paths[1],
+        chat_id=GROUP_ID,
+        kind="reply",
+        content="Answer the question",
+        reply_to=19,
+        config_path=act_paths[0],
+        db_path=act_paths[1],
     )
     monkeypatch.setattr(policy, "CONFIG_PATH", act_paths[0])
     monkeypatch.setattr(policy, "DATA_PATH", act_paths[1])

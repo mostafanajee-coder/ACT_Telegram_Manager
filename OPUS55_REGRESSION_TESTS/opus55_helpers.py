@@ -1,4 +1,5 @@
 """Shared helpers for Opus 5.5 adversarial tests (dummy data only)."""
+
 import asyncio
 import hashlib
 import json
@@ -31,23 +32,42 @@ class SendRecorder:
         return self.result
 
 
-def prep(paths, *, chat_id=CHAT_ADS, kind="ad", content="Dummy ad text", reply_to=None,
-         schedule_at=None, now=NOW):
+def prep(
+    paths,
+    *,
+    chat_id=CHAT_ADS,
+    kind="ad",
+    content="Dummy ad text",
+    reply_to=None,
+    schedule_at=None,
+    now=NOW,
+):
     cfg, db = paths
-    return policy.prepare(chat_id=chat_id, kind=kind, content=content, reply_to=reply_to,
-                          schedule_at=schedule_at, config_path=cfg, db_path=db, now=now)
+    return policy.prepare(
+        chat_id=chat_id,
+        kind=kind,
+        content=content,
+        reply_to=reply_to,
+        schedule_at=schedule_at,
+        config_path=cfg,
+        db_path=db,
+        now=now,
+    )
 
 
 def human_approve(paths, post):
     """Equivalent of the CLI path after a correct typed phrase."""
-    fp = policy.compute_fingerprint(post["chat_id"], post["kind"], post["reply_to"], post["content"])
+    fp = policy.compute_fingerprint(
+        post["chat_id"], post["kind"], post["reply_to"], post["content"]
+    )
     return policy.approve(post["id"], db_path=paths[1], expected_fingerprint=fp)
 
 
 def dispatch(paths, draft_id, sender, *, preflight=None, now=NOW):
     cfg, db = paths
-    return asyncio.run(policy.execute(draft_id, sender, preflight=preflight,
-                                      config_path=cfg, db_path=db, now=now))
+    return asyncio.run(
+        policy.execute(draft_id, sender, preflight=preflight, config_path=cfg, db_path=db, now=now)
+    )
 
 
 def raw_db(paths):
@@ -62,14 +82,24 @@ def status(paths, draft_id):
 
 def unkeyed_integrity(draft_id, chat_id, kind, reply_to, content, schedule_utc):
     """Attacker-side recomputation: the 'integrity' hash needs no secret."""
-    return hashlib.sha256(json.dumps([draft_id, chat_id, kind, reply_to, content, schedule_utc],
-                                     ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(
+            [draft_id, chat_id, kind, reply_to, content, schedule_utc],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
 
 
 def run_child(code: str, *args, timeout=60):
     """Run python code in a separate same-user process with stdin=/dev/null (no TTY)."""
-    return subprocess.run([sys.executable, "-c", code, *map(str, args)], stdin=subprocess.DEVNULL,
-                          capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(
+        [sys.executable, "-c", code, *map(str, args)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
 
 
 def later(minutes=0, hours=0, days=0):

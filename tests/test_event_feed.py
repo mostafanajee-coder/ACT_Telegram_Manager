@@ -194,14 +194,18 @@ def test_default_feed_path_creates_its_directory(monkeypatch, tmp_path):
     assert events.feed_file_path().exists()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX 0o600 mode bits are not supported on Windows NTFS")
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX 0o600 mode bits are not supported on Windows NTFS"
+)
 def test_feed_file_created_owner_only():
     events._touch_feed_file()
     mode = stat.S_IMODE(events.feed_file_path().stat().st_mode)
     assert mode == 0o600
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX 0o600 mode bits are not supported on Windows NTFS")
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX 0o600 mode bits are not supported on Windows NTFS"
+)
 def test_existing_world_readable_feed_file_is_tightened():
     path = events.feed_file_path()
     path.touch()

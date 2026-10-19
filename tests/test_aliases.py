@@ -296,7 +296,9 @@ def test_update_aliases_does_not_lose_a_concurrent_write():
     assert _ids(runtime.load_aliases()) == {"первый": 1, "второй": 2, "третий": 3}
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX chmod 0o000 read restriction is not supported on Windows NTFS")
+@pytest.mark.skipif(
+    os.name == "nt", reason="POSIX chmod 0o000 read restriction is not supported on Windows NTFS"
+)
 def test_update_aliases_refuses_to_write_over_an_unreadable_file():
     path = runtime.aliases_file_path()
     runtime.save_aliases({"важный": 1})

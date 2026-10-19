@@ -2,6 +2,7 @@
 
 Dummy data only; fake Telethon client objects; offline_guard blocks real sockets.
 """
+
 import asyncio
 import json
 import os
@@ -24,8 +25,13 @@ PROMO = "Limited offer! Salla <-> Odoo connector 40% off today, DM me or visit e
 def test_exploit_reply_label_carries_ads_into_ads_forbidden_group(act_paths):
     sender = SendRecorder()
     for i in range(10):
-        p = prep(act_paths, chat_id=CHAT_REPLIES_ONLY, kind="reply", reply_to=500 + i,
-                 content=f"{PROMO} #{i}")
+        p = prep(
+            act_paths,
+            chat_id=CHAT_REPLIES_ONLY,
+            kind="reply",
+            reply_to=500 + i,
+            content=f"{PROMO} #{i}",
+        )
         human_approve(act_paths, p)
         assert dispatch(act_paths, p["id"], sender, now=NOW)["status"] == "sent"
     assert len(sender.calls) == 10  # no quota, no spacing, no ads_allowed check for 'reply'
@@ -37,7 +43,9 @@ def test_exploit_reply_label_bypasses_daily_ad_quota_in_ads_group(act_paths):
         p = prep(act_paths, content=f"ad {i}", schedule_at=f"2026-10-18T1{3 + 2 * i}:00:00+03:00")
         human_approve(act_paths, p)
         dispatch(act_paths, p["id"], sender)
-    more = prep(act_paths, kind="reply", reply_to=1, content=PROMO)  # reply to ANY message id, e.g. own ad
+    more = prep(
+        act_paths, kind="reply", reply_to=1, content=PROMO
+    )  # reply to ANY message id, e.g. own ad
     human_approve(act_paths, more)
     assert dispatch(act_paths, more["id"], sender)["status"] == "sent"
     assert len(sender.calls) == 4
@@ -47,7 +55,9 @@ def test_exploit_reply_dedup_is_per_reply_target(act_paths):
     """Same promo text replied under different message ids is not a duplicate."""
     sender = SendRecorder()
     for target in (11, 12, 13):
-        p = prep(act_paths, chat_id=CHAT_REPLIES_ONLY, kind="reply", reply_to=target, content=PROMO)
+        p = prep(
+            act_paths, chat_id=CHAT_REPLIES_ONLY, kind="reply", reply_to=target, content=PROMO
+        )
         human_approve(act_paths, p)
         dispatch(act_paths, p["id"], sender)
     assert len(sender.calls) == 3
@@ -58,6 +68,7 @@ def test_evidence_cli_preview_does_not_show_replied_to_message(act_paths, monkey
     import builtins
     import io
     import act_cli
+
     p = prep(act_paths, chat_id=CHAT_REPLIES_ONLY, kind="reply", reply_to=77, content=PROMO)
     monkeypatch.setattr(policy, "CONFIG_PATH", act_paths[0])
     monkeypatch.setattr(policy, "DATA_PATH", act_paths[1])
@@ -88,8 +99,17 @@ def test_matrix_unbounded_draft_growth(act_paths):
     out = os.environ.get("OPUS55_MATRIX_OUT")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"case": "R3-02 growth", "drafts": rows, "bytes_db_plus_wal": size,
-                                 "seconds": round(elapsed, 2)}) + "\n")
+            fh.write(
+                json.dumps(
+                    {
+                        "case": "R3-02 growth",
+                        "drafts": rows,
+                        "bytes_db_plus_wal": size,
+                        "seconds": round(elapsed, 2),
+                    }
+                )
+                + "\n"
+            )
     assert rows == n and size > n * 4000  # nothing refused, no cap, no retention
 
 
@@ -113,16 +133,25 @@ _WRITER = textwrap.dedent("""
 
 def test_matrix_concurrent_writers_wal(act_paths):
     prep(act_paths)
-    procs = [subprocess.Popen([sys.executable, "-c", _WRITER, str(act_paths[0]), str(act_paths[1]),
-                               f"w{k}", "300"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              stdin=subprocess.DEVNULL, text=True) for k in range(4)]
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-c", _WRITER, str(act_paths[0]), str(act_paths[1]), f"w{k}", "300"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+        )
+        for k in range(4)
+    ]
     res = [p.communicate(timeout=300) for p in procs]
     oks = sum(int(o.split()[0]) for o, _ in res)
     errs = sum(int(o.split()[1]) for o, _ in res)
     out = os.environ.get("OPUS55_MATRIX_OUT")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"case": "R3-02 4 writers x300", "ok": oks, "errors": errs}) + "\n")
+            fh.write(
+                json.dumps({"case": "R3-02 4 writers x300", "ok": oks, "errors": errs}) + "\n"
+            )
     assert oks == 1200 and errs == 0
 
 
@@ -147,6 +176,7 @@ def restricted_mcp():
     from telegram_mcp.runtime import mcp
     import act_manager.tools  # noqa: F401
     from act_server import ALLOWED, restrict_tools
+
     restrict_tools(mcp)
     return mcp, ALLOWED
 
@@ -156,9 +186,13 @@ def test_surface_exactly_five_tools_and_schemas(restricted_mcp):
     tools = asyncio.run(mcp.list_tools())
     names = {t.name for t in tools}
     assert names == set(allowed)
-    dump = {t.name: {"inputSchema": t.inputSchema,
-                     "annotations": t.annotations.model_dump(exclude_none=True) if t.annotations else None}
-            for t in tools}
+    dump = {
+        t.name: {
+            "inputSchema": t.inputSchema,
+            "annotations": t.annotations.model_dump(exclude_none=True) if t.annotations else None,
+        }
+        for t in tools
+    }
     out = os.environ.get("OPUS55_MATRIX_OUT")
     if out:
         with open(out.replace(".matrix.jsonl", ".tool_schemas.json"), "w", encoding="utf-8") as fh:
@@ -166,11 +200,19 @@ def test_surface_exactly_five_tools_and_schemas(restricted_mcp):
     assert dump["act_dispatch_post"]["annotations"].get("destructiveHint") is True
     assert dump["act_policy"]["annotations"].get("readOnlyHint") is True
     assert set(dump["act_prepare_post"]["inputSchema"]["properties"]) == {
-        "chat_id", "kind", "content", "reply_to", "schedule_at",
-        "destination_type", "recipient_user_id", "recipient_username"}
-    assert dump["act_prepare_post"]["inputSchema"]["properties"]["destination_type"].get(
-        "default"
-    ) == "group"
+        "chat_id",
+        "kind",
+        "content",
+        "reply_to",
+        "schedule_at",
+        "destination_type",
+        "recipient_user_id",
+        "recipient_username",
+    }
+    assert (
+        dump["act_prepare_post"]["inputSchema"]["properties"]["destination_type"].get("default")
+        == "group"
+    )
 
 
 def test_surface_no_prompts_or_resources(restricted_mcp):
@@ -183,6 +225,7 @@ def test_surface_no_prompts_or_resources(restricted_mcp):
 def test_surface_http_factory_still_builds_unauthenticated_app(restricted_mcp):
     """Not reachable from act_server/main/runner (stdio enforced) but importable by any local code."""
     import telegram_mcp.server as srv
+
     app = srv.get_http_app()
     assert app is not None
 
@@ -196,6 +239,7 @@ class _Me:
 class _Chan:
     def __init__(self, cid):
         from telethon.tl.types import Channel
+
         self.__class__ = type("FakeChannel", (Channel,), {})
         self.id = abs(cid) - 1000000000000
         self.left = self.kicked = self.deactivated = False
@@ -219,8 +263,17 @@ class FakeTelethon:
     async def get_entity(self, ident):
         from telethon.tl.types import PeerChannel
         from telethon import utils
-        return type("E", (), {"id": abs(ident) - 1000000000000, "left": False, "kicked": False,
-                              "deactivated": False})()
+
+        return type(
+            "E",
+            (),
+            {
+                "id": abs(ident) - 1000000000000,
+                "left": False,
+                "kicked": False,
+                "deactivated": False,
+            },
+        )()
 
     async def get_messages(self, entity, ids=None):
         return object() if self.reply_exists else None
@@ -240,6 +293,7 @@ class FakeTelethon:
 def tool_env(act_paths, monkeypatch):
     import act_manager.tools as tools
     from telethon import utils
+
     monkeypatch.setattr(policy, "CONFIG_PATH", act_paths[0])
     monkeypatch.setattr(policy, "DATA_PATH", act_paths[1])
     monkeypatch.setattr(utils, "get_peer_id", lambda e: -1000000000000 - e.id)
@@ -292,7 +346,15 @@ def test_regress_concurrent_dispatch_restores_flood_threshold(act_paths, tool_en
     out = os.environ.get("OPUS55_MATRIX_OUT")
     if out:
         with open(out, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"case": "flood threshold race", "seen_during_send": fake.thresholds_seen,
-                                 "final": fake.flood_sleep_threshold}) + "\n")
+            fh.write(
+                json.dumps(
+                    {
+                        "case": "flood threshold race",
+                        "seen_during_send": fake.thresholds_seen,
+                        "final": fake.flood_sleep_threshold,
+                    }
+                )
+                + "\n"
+            )
     assert fake.thresholds_seen == [0, 0]
     assert fake.flood_sleep_threshold == 60

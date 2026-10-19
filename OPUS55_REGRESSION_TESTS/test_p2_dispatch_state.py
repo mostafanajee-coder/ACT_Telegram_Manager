@@ -3,6 +3,7 @@
 `test_matrix_*` record observed behaviour (sender calls, SQLite state, quota, retry).
 `test_regress_*` assert the SAFE behaviour; a failure on the baseline is the defect proof.
 """
+
 import asyncio
 import json
 import os
@@ -15,8 +16,16 @@ import pytest
 
 from act_manager import policy
 from conftest import CHAT_ADS, CHAT_ADS_2, CHAT_ADS_3, NOW
-from opus55_helpers import (SendRecorder, dispatch, human_approve, later, prep, raw_db,
-                            run_child, status)
+from opus55_helpers import (
+    SendRecorder,
+    dispatch,
+    human_approve,
+    later,
+    prep,
+    raw_db,
+    run_child,
+    status,
+)
 
 MATRIX = []
 
@@ -31,18 +40,23 @@ def _record(name, **kw):
 
 def _ad_slots_used(paths):
     con = raw_db(paths)
-    n = con.execute("SELECT COUNT(*) FROM posts WHERE kind='ad' AND status IN "
-                    "('sending','sent','scheduled','uncertain')").fetchone()[0]
+    n = con.execute(
+        "SELECT COUNT(*) FROM posts WHERE kind='ad' AND status IN "
+        "('sending','sent','scheduled','uncertain')"
+    ).fetchone()[0]
     con.close()
     return n
 
 
 # --------------------------------------------------------------------------- preflight phase
-@pytest.mark.parametrize("exc, expect", [
-    (policy.PolicyError("identity mismatch"), policy.PolicyError),
-    (ConnectionError("dns"), policy.PolicyError),
-    (asyncio.CancelledError(), asyncio.CancelledError),
-])
+@pytest.mark.parametrize(
+    "exc, expect",
+    [
+        (policy.PolicyError("identity mismatch"), policy.PolicyError),
+        (ConnectionError("dns"), policy.PolicyError),
+        (asyncio.CancelledError(), asyncio.CancelledError),
+    ],
+)
 def test_matrix_preflight_failure_rolls_back(act_paths, exc, expect):
     post = prep(act_paths)
     human_approve(act_paths, post)
@@ -54,19 +68,33 @@ def test_matrix_preflight_failure_rolls_back(act_paths, exc, expect):
     with pytest.raises(expect):
         dispatch(act_paths, post["id"], sender, preflight=preflight)
     st = status(act_paths, post["id"])
-    _record("preflight:" + type(exc).__name__, sender_calls=len(sender.calls), sqlite=st,
-            ad_slots=_ad_slots_used(act_paths), retry_eligible=(st == "approved"))
+    _record(
+        "preflight:" + type(exc).__name__,
+        sender_calls=len(sender.calls),
+        sqlite=st,
+        ad_slots=_ad_slots_used(act_paths),
+        retry_eligible=(st == "approved"),
+    )
     assert st == "approved" and not sender.calls and _ad_slots_used(act_paths) == 0
+
     async def ok_preflight(item):
         return {}
+
     assert dispatch(act_paths, post["id"], sender, preflight=ok_preflight)["status"] == "sent"
     assert len(sender.calls) == 1
 
 
 # --------------------------------------------------------------------------- send phase
-@pytest.mark.parametrize("exc", [TimeoutError("drop"), policy.PolicyError("late"),
-                                 ConnectionResetError(), asyncio.CancelledError(),
-                                 KeyboardInterrupt()])
+@pytest.mark.parametrize(
+    "exc",
+    [
+        TimeoutError("drop"),
+        policy.PolicyError("late"),
+        ConnectionResetError(),
+        asyncio.CancelledError(),
+        KeyboardInterrupt(),
+    ],
+)
 def test_matrix_sender_failure_is_uncertain_never_retried(act_paths, exc):
     post = prep(act_paths)
     human_approve(act_paths, post)
@@ -78,9 +106,14 @@ def test_matrix_sender_failure_is_uncertain_never_retried(act_paths, exc):
     with pytest.raises(BaseException) as info:
         dispatch(act_paths, post["id"], sender, preflight=preflight)
     st = status(act_paths, post["id"])
-    _record("sender:" + type(exc).__name__, raised=type(info.value).__name__,
-            sender_calls=len(sender.calls), sqlite=st, ad_slots=_ad_slots_used(act_paths),
-            retry_eligible=False)
+    _record(
+        "sender:" + type(exc).__name__,
+        raised=type(info.value).__name__,
+        sender_calls=len(sender.calls),
+        sqlite=st,
+        ad_slots=_ad_slots_used(act_paths),
+        retry_eligible=False,
+    )
     assert st == "uncertain" and len(sender.calls) == 1
     with pytest.raises(policy.PolicyError, match="unused"):
         dispatch(act_paths, post["id"], SendRecorder(), preflight=preflight)
@@ -96,8 +129,16 @@ def test_matrix_cancellation_inside_sender_surfaces_as_policyerror(act_paths):
         return {}
 
     async def run():
-        task = asyncio.ensure_future(policy.execute(post["id"], sender, preflight=preflight,
-                                                    config_path=act_paths[0], db_path=act_paths[1], now=NOW))
+        task = asyncio.ensure_future(
+            policy.execute(
+                post["id"],
+                sender,
+                preflight=preflight,
+                config_path=act_paths[0],
+                db_path=act_paths[1],
+                now=NOW,
+            )
+        )
         await asyncio.sleep(0.05)
         task.cancel()
         try:
@@ -106,8 +147,12 @@ def test_matrix_cancellation_inside_sender_surfaces_as_policyerror(act_paths):
             return e
 
     err = asyncio.run(run())
-    _record("sender:task.cancel()", raised=type(err).__name__, sender_calls=len(sender.calls),
-            sqlite=status(act_paths, post["id"]))
+    _record(
+        "sender:task.cancel()",
+        raised=type(err).__name__,
+        sender_calls=len(sender.calls),
+        sqlite=status(act_paths, post["id"]),
+    )
     assert status(act_paths, post["id"]) == "uncertain"
     assert isinstance(err, policy.PolicyError)
 
@@ -147,9 +192,15 @@ def test_matrix_process_kill_leaves_sending_forever(act_paths, tmp_path, phase):
     sends2 = marker.read_text().count("SEND") if marker.exists() else 0
     with pytest.raises(policy.PolicyError):
         policy.cancel(post["id"], db_path=act_paths[1])
-    _record("os._exit during " + phase, child_rc=child.returncode, sender_calls=sends, sqlite=st,
-            ad_slots=_ad_slots_used(act_paths), restart_sender_calls=sends2 - sends,
-            operator_cancel_possible=False)
+    _record(
+        "os._exit during " + phase,
+        child_rc=child.returncode,
+        sender_calls=sends,
+        sqlite=st,
+        ad_slots=_ad_slots_used(act_paths),
+        restart_sender_calls=sends2 - sends,
+        operator_cancel_possible=False,
+    )
     assert child.returncode == 9 and st == "sending"
     assert sends2 == sends  # never re-sent after restart
     assert _ad_slots_used(act_paths) == 1  # quota slot consumed even when nothing was sent
@@ -183,18 +234,38 @@ def test_matrix_eight_processes_race_one_send(act_paths, tmp_path):
     import subprocess
     import sys
     import time
+
     post = prep(act_paths)
     human_approve(act_paths, post)
     marker = tmp_path / "race.txt"
     start = time.time() + 2.0
-    procs = [subprocess.Popen([sys.executable, "-c", _RACE, str(act_paths[0]), str(act_paths[1]),
-                               post["id"], str(marker), str(start)], stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True)
-             for _ in range(8)]
+    procs = [
+        subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                _RACE,
+                str(act_paths[0]),
+                str(act_paths[1]),
+                post["id"],
+                str(marker),
+                str(start),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+        )
+        for _ in range(8)
+    ]
     outs = [p.communicate(timeout=120)[0].strip() for p in procs]
     sends = marker.read_text().count("SEND")
-    _record("8-process race", sender_calls=sends, ok=sum(o.startswith("OK") for o in outs),
-            sqlite=status(act_paths, post["id"]))
+    _record(
+        "8-process race",
+        sender_calls=sends,
+        ok=sum(o.startswith("OK") for o in outs),
+        sqlite=status(act_paths, post["id"]),
+    )
     assert sends == 1 and sum(o.startswith("OK") for o in outs) == 1
 
 
@@ -217,8 +288,13 @@ def test_matrix_finalize_commit_failure_after_successful_send(act_paths, monkeyp
     with pytest.raises(Exception) as info:
         dispatch(act_paths, post["id"], sender, preflight=preflight)
     st = status(act_paths, post["id"])
-    _record("finalize SQLITE_FULL after send", sender_calls=len(sender.calls), sqlite=st,
-            raised=type(info.value).__name__, message=str(info.value)[:120])
+    _record(
+        "finalize SQLITE_FULL after send",
+        sender_calls=len(sender.calls),
+        sqlite=st,
+        raised=type(info.value).__name__,
+        message=str(info.value)[:120],
+    )
     assert st == "sending" and len(sender.calls) == 1
     return info.value
 
@@ -231,16 +307,23 @@ def test_regress_finalize_failure_after_send_says_do_not_retry(act_paths, monkey
 def test_matrix_unreserve_failure_leaves_sending(act_paths, monkeypatch):
     post = prep(act_paths)
     human_approve(act_paths, post)
-    monkeypatch.setattr(policy, "unreserve", lambda *a, **k: (_ for _ in ()).throw(
-        sqlite3.OperationalError("database is locked")))
+    monkeypatch.setattr(
+        policy,
+        "unreserve",
+        lambda *a, **k: (_ for _ in ()).throw(sqlite3.OperationalError("database is locked")),
+    )
 
     async def preflight(item):
         raise ConnectionError("no network")
 
     with pytest.raises(sqlite3.OperationalError):
         dispatch(act_paths, post["id"], SendRecorder(), preflight=preflight)
-    _record("unreserve fails after preflight error", sqlite=status(act_paths, post["id"]),
-            sender_calls=0, ad_slots=_ad_slots_used(act_paths))
+    _record(
+        "unreserve fails after preflight error",
+        sqlite=status(act_paths, post["id"]),
+        sender_calls=0,
+        ad_slots=_ad_slots_used(act_paths),
+    )
     assert status(act_paths, post["id"]) == "sending"
 
 
@@ -251,22 +334,38 @@ def test_matrix_riyadh_midnight_boundary(act_paths):
     a = prep(act_paths, content="late", schedule_at="2026-10-18T23:30:00+03:00")
     human_approve(act_paths, a)
     dispatch(act_paths, a["id"], sender)
-    b = prep(act_paths, chat_id=CHAT_ADS_2, content="after midnight", schedule_at="2026-10-19T00:30:00+03:00")
+    b = prep(
+        act_paths,
+        chat_id=CHAT_ADS_2,
+        content="after midnight",
+        schedule_at="2026-10-19T00:30:00+03:00",
+    )
     human_approve(act_paths, b)
     assert dispatch(act_paths, b["id"], sender)["status"] == "scheduled"
-    c = prep(act_paths, chat_id=CHAT_ADS_3, content="59 min", schedule_at="2026-10-19T01:29:00+03:00")
+    c = prep(
+        act_paths, chat_id=CHAT_ADS_3, content="59 min", schedule_at="2026-10-19T01:29:00+03:00"
+    )
     human_approve(act_paths, c)
     with pytest.raises(policy.PolicyError, match="60 minutes"):
         dispatch(act_paths, c["id"], sender)
     for i, hh in enumerate(("03", "05")):
-        p = prep(act_paths, chat_id=CHAT_ADS_3, content=f"d2 {i}", schedule_at=f"2026-10-19T{hh}:00:00+03:00")
+        p = prep(
+            act_paths,
+            chat_id=CHAT_ADS_3,
+            content=f"d2 {i}",
+            schedule_at=f"2026-10-19T{hh}:00:00+03:00",
+        )
         human_approve(act_paths, p)
         dispatch(act_paths, p["id"], sender)
     d = prep(act_paths, content="4th on 19th", schedule_at="2026-10-19T08:00:00+03:00")
     human_approve(act_paths, d)
     with pytest.raises(policy.PolicyError, match="quota"):
         dispatch(act_paths, d["id"], sender)
-    _record("riyadh midnight", sender_calls=len(sender.calls), note="60m exactly allowed; 59m refused; 3/day")
+    _record(
+        "riyadh midnight",
+        sender_calls=len(sender.calls),
+        note="60m exactly allowed; 59m refused; 3/day",
+    )
 
 
 def test_matrix_cli_approval_accepts_stale_schedule_but_reserve_blocks(act_paths):
@@ -276,17 +375,29 @@ def test_matrix_cli_approval_accepts_stale_schedule_but_reserve_blocks(act_paths
     time in fixtures and calls approve() without `now`, so changing this would alter test semantics.
     """
     from opus55_helpers import unkeyed_integrity
+
     post = prep(act_paths, schedule_at=later(minutes=5).isoformat())
     con = raw_db(act_paths)
     past = (NOW - timedelta(days=1)).isoformat(timespec="seconds")
-    con.execute("UPDATE posts SET schedule_utc=?, integrity_hash=? WHERE id=?",
-                (past, unkeyed_integrity(post["id"], CHAT_ADS, "ad", None, post["content"], past), post["id"]))
+    con.execute(
+        "UPDATE posts SET schedule_utc=?, integrity_hash=? WHERE id=?",
+        (
+            past,
+            unkeyed_integrity(post["id"], CHAT_ADS, "ad", None, post["content"], past),
+            post["id"],
+        ),
+    )
     con.close()
     policy.approve(post["id"], db_path=act_paths[1])  # CLI call shape: no `now`
     sender = SendRecorder()
     with pytest.raises(policy.PolicyError, match="too near/past"):
         dispatch(act_paths, post["id"], sender)
-    _record("approve stale schedule (CLI shape)", approve="accepted", reserve="refused", sender_calls=len(sender.calls))
+    _record(
+        "approve stale schedule (CLI shape)",
+        approve="accepted",
+        reserve="refused",
+        sender_calls=len(sender.calls),
+    )
     assert not sender.calls
 
 
@@ -297,6 +408,7 @@ def test_regress_cli_approval_binds_schedule(act_paths, monkeypatch):
     import sys
     import act_cli
     from opus55_helpers import unkeyed_integrity
+
     post = prep(act_paths, schedule_at=later(hours=2).isoformat())
     monkeypatch.setattr(policy, "CONFIG_PATH", act_paths[0])
     monkeypatch.setattr(policy, "DATA_PATH", act_paths[1])
@@ -307,9 +419,15 @@ def test_regress_cli_approval_binds_schedule(act_paths, monkeypatch):
 
     def operator_types_phrase(prompt=""):
         con = raw_db(act_paths)  # agent edits the row between preview and confirmation
-        con.execute("UPDATE posts SET schedule_utc=?, planned_utc=?, integrity_hash=? WHERE id=?",
-                    (moved, moved, unkeyed_integrity(post["id"], CHAT_ADS, "ad", None, post["content"], moved),
-                     post["id"]))
+        con.execute(
+            "UPDATE posts SET schedule_utc=?, planned_utc=?, integrity_hash=? WHERE id=?",
+            (
+                moved,
+                moved,
+                unkeyed_integrity(post["id"], CHAT_ADS, "ad", None, post["content"], moved),
+                post["id"],
+            ),
+        )
         con.close()
         return f"APPROVE {post['id']}"
 
@@ -318,15 +436,19 @@ def test_regress_cli_approval_binds_schedule(act_paths, monkeypatch):
         act_cli.main(["approve", post["id"]])
     except SystemExit:
         pass
-    assert status(act_paths, post["id"]) == "draft", "approval accepted a schedule the operator never saw"
+    assert (
+        status(act_paths, post["id"]) == "draft"
+    ), "approval accepted a schedule the operator never saw"
 
 
 def test_regress_null_integrity_hash_is_refused(act_paths):
     post = prep(act_paths)
     evil = "changed after preview"
     con = raw_db(act_paths)
-    con.execute("UPDATE posts SET content=?, fingerprint=?, integrity_hash=NULL WHERE id=?",
-                (evil, policy.compute_fingerprint(CHAT_ADS, "ad", None, evil), post["id"]))
+    con.execute(
+        "UPDATE posts SET content=?, fingerprint=?, integrity_hash=NULL WHERE id=?",
+        (evil, policy.compute_fingerprint(CHAT_ADS, "ad", None, evil), post["id"]),
+    )
     con.close()
     with pytest.raises(policy.PolicyError, match="integrity"):
         policy.approve(post["id"], db_path=act_paths[1])
@@ -393,16 +515,26 @@ _CAP_WRITER = textwrap.dedent("""
 def test_regress_open_draft_cap_holds_under_concurrent_processes(act_paths):
     import subprocess
     import sys
+
     cfg = json.loads(act_paths[0].read_text(encoding="utf-8"))
     cfg["max_open_drafts"] = 50
     act_paths[0].write_text(json.dumps(cfg), encoding="utf-8")
     prep(act_paths, content="seed")
-    procs = [subprocess.Popen([sys.executable, "-c", _CAP_WRITER, str(act_paths[0]), str(act_paths[1]), f"p{k}"],
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True)
-             for k in range(4)]
+    procs = [
+        subprocess.Popen(
+            [sys.executable, "-c", _CAP_WRITER, str(act_paths[0]), str(act_paths[1]), f"p{k}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+        )
+        for k in range(4)
+    ]
     outs = [p.communicate(timeout=300)[0].split() for p in procs]
     con = raw_db(act_paths)
-    open_rows = con.execute("SELECT COUNT(*) FROM posts WHERE status IN ('draft','approved')").fetchone()[0]
+    open_rows = con.execute(
+        "SELECT COUNT(*) FROM posts WHERE status IN ('draft','approved')"
+    ).fetchone()[0]
     con.close()
     _record("open-draft cap 50, 4 procs x 40", open_rows=open_rows, per_proc=outs)
     assert open_rows == 50

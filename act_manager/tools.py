@@ -1,4 +1,5 @@
 """Only these narrow ACT tools are exposed by act_server.py."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,7 +8,6 @@ from typing import Literal
 from mcp.types import ToolAnnotations
 from telegram_mcp.runtime import mcp, get_client, ensure_connected, resolve_entity
 from act_manager import policy
-
 
 # id(client) -> [active sends, operator's flood_sleep_threshold]
 _flood_holders: dict[int, list] = {}
@@ -44,7 +44,10 @@ def _flood_threshold_exit(client) -> None:
 
 def _error(exc: Exception) -> dict:
     # Return controlled refusals without leaking credentials, paths, or message bodies.
-    return {"ok": False, "error": str(exc) if isinstance(exc, policy.PolicyError) else type(exc).__name__}
+    return {
+        "ok": False,
+        "error": str(exc) if isinstance(exc, policy.PolicyError) else type(exc).__name__,
+    }
 
 
 _TELEGRAM_USERNAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{4,31}\Z")
@@ -71,27 +74,35 @@ def _verified_private_user_id(
     from telethon.tl.types import User
 
     if not isinstance(entity, User):
-        raise policy.PolicyError("Private recipient must resolve to a Telegram User; no draft created.")
+        raise policy.PolicyError(
+            "Private recipient must resolve to a Telegram User; no draft created."
+        )
     if getattr(entity, "bot", False) or getattr(entity, "deleted", False):
         raise policy.PolicyError("Bots and deleted users cannot be private reply targets.")
     user_id = policy._strict_user_id(getattr(entity, "id", None))
     if user_id == account_user_id:
         raise policy.PolicyError("The account cannot be its own private reply target.")
     if expected_user_id is not None and user_id != expected_user_id:
-        raise policy.PolicyError("Resolved Telegram User ID does not match the requested recipient.")
+        raise policy.PolicyError(
+            "Resolved Telegram User ID does not match the requested recipient."
+        )
     if expected_username is not None:
         usernames = {getattr(entity, "username", None)}
         usernames.update(
-            getattr(alias, "username", None) for alias in (getattr(entity, "usernames", None) or [])
+            getattr(alias, "username", None)
+            for alias in (getattr(entity, "usernames", None) or [])
         )
         normalized = {name.casefold() for name in usernames if isinstance(name, str)}
         if expected_username.casefold() not in normalized:
-            raise policy.PolicyError("Resolved Telegram User does not match the requested username.")
+            raise policy.PolicyError(
+                "Resolved Telegram User does not match the requested username."
+            )
     return user_id
 
 
-async def _resolve_private_user(client, *, recipient_user_id: int | None,
-                                recipient_username: str | None, account_user_id: int) -> int:
+async def _resolve_private_user(
+    client, *, recipient_user_id: int | None, recipient_username: str | None, account_user_id: int
+) -> int:
     if (recipient_user_id is None) == (recipient_username is None):
         raise policy.PolicyError("Provide exactly one private recipient User ID or username.")
     if recipient_user_id is not None:
@@ -131,7 +142,11 @@ async def act_policy() -> dict:
         return _error(exc)
 
 
-@mcp.tool(annotations=ToolAnnotations(title="ACT Prepare Post", readOnlyHint=False, destructiveHint=False))
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="ACT Prepare Post", readOnlyHint=False, destructiveHint=False
+    )
+)
 async def act_prepare_post(
     chat_id: int | None,
     kind: str,
@@ -164,11 +179,15 @@ async def act_prepare_post(
             if kind != "reply":
                 raise policy.PolicyError("private_user destinations support replies only.")
             if type(reply_to) is not int or reply_to <= 0:
-                raise policy.PolicyError("Private replies require one specific incoming message ID.")
+                raise policy.PolicyError(
+                    "Private replies require one specific incoming message ID."
+                )
             if schedule_at is not None:
                 raise policy.PolicyError("Private replies cannot be scheduled.")
             if (recipient_user_id is None) == (recipient_username is None):
-                raise policy.PolicyError("Provide exactly one private recipient User ID or username.")
+                raise policy.PolicyError(
+                    "Provide exactly one private recipient User ID or username."
+                )
             if recipient_user_id is not None:
                 policy._strict_user_id(recipient_user_id)
             else:
@@ -227,7 +246,11 @@ async def act_list_posts(limit: int = 10) -> dict:
         return _error(exc)
 
 
-@mcp.tool(annotations=ToolAnnotations(title="ACT Dispatch Approved Post", destructiveHint=True, idempotentHint=False))
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="ACT Dispatch Approved Post", destructiveHint=True, idempotentHint=False
+    )
+)
 async def act_dispatch_post(draft_id: str) -> dict:
     """Send ONCE from personal Telegram account only after separate local CLI approval.
 
@@ -251,10 +274,15 @@ async def act_dispatch_post(draft_id: str) -> dict:
                     f"Pre-send Telegram connection/auth check failed ({type(exc).__name__}); no send attempted."
                 ) from exc
 
-            if me is None or getattr(me, "id", None) != cfg["expected_user_id"] or getattr(me, "bot", False):
+            if (
+                me is None
+                or getattr(me, "id", None) != cfg["expected_user_id"]
+                or getattr(me, "bot", False)
+            ):
                 raise policy.PolicyError("Account mismatch or bot account; no send attempted.")
 
             from telethon import utils
+
             destination_type = item.get("destination_type") or "group"
             if destination_type == "group":
                 try:
@@ -270,7 +298,9 @@ async def act_dispatch_post(draft_id: str) -> dict:
                         "Resolved Telegram entity has invalid peer ID; no send attempted."
                     ) from exc
                 if resolved_peer_id != item["chat_id"]:
-                    raise policy.PolicyError("Resolved Telegram destination mismatch; no send attempted.")
+                    raise policy.PolicyError(
+                        "Resolved Telegram destination mismatch; no send attempted."
+                    )
                 if (
                     getattr(entity, "deactivated", False)
                     or getattr(entity, "left", False)
@@ -297,7 +327,9 @@ async def act_dispatch_post(draft_id: str) -> dict:
                         "Resolved private recipient has invalid peer ID; no send attempted."
                     ) from exc
                 if resolved_peer_id != actual_user_id:
-                    raise policy.PolicyError("Resolved private recipient mismatch; no send attempted.")
+                    raise policy.PolicyError(
+                        "Resolved private recipient mismatch; no send attempted."
+                    )
             else:
                 raise policy.PolicyError("Unknown destination type; no send attempted.")
 
@@ -325,7 +357,10 @@ async def act_dispatch_post(draft_id: str) -> dict:
                         raise policy.PolicyError(
                             "Private reply target ID mismatch; no send attempted."
                         )
-                    if getattr(orig_msg, "sender_id", None) != recipient_id or getattr(orig_msg, "out", None) is not False:
+                    if (
+                        getattr(orig_msg, "sender_id", None) != recipient_id
+                        or getattr(orig_msg, "out", None) is not False
+                    ):
                         raise policy.PolicyError(
                             "Private reply target is not an incoming message from the specified user; no send attempted."
                         )

@@ -3,6 +3,7 @@
 Environment is set before any telegram_mcp import so runtime builds an
 unconnected dummy client. The offline_guard plugin blocks real sockets.
 """
+
 import json
 import os
 import sys
@@ -35,14 +36,23 @@ EXPECTED_USER = 7000001
 def act_paths(tmp_path):
     cfg = tmp_path / "act_config.json"
     db = tmp_path / "act_data" / "posts.sqlite3"
-    cfg.write_text(json.dumps({
-        "expected_user_id": EXPECTED_USER,
-        "daily_ad_limit": 3,
-        "allowed_chats": [
-            {"chat_id": CHAT_ADS, "label": "Dummy ads group A", "ads_allowed": True},
-            {"chat_id": CHAT_ADS_2, "label": "Dummy ads group B", "ads_allowed": True},
-            {"chat_id": CHAT_ADS_3, "label": "Dummy ads group C", "ads_allowed": True},
-            {"chat_id": CHAT_REPLIES_ONLY, "label": "Dummy no-ads group", "ads_allowed": False},
-        ],
-    }), encoding="utf-8")
+    cfg.write_text(
+        json.dumps(
+            {
+                "expected_user_id": EXPECTED_USER,
+                "daily_ad_limit": 3,
+                "allowed_chats": [
+                    {"chat_id": CHAT_ADS, "label": "Dummy ads group A", "ads_allowed": True},
+                    {"chat_id": CHAT_ADS_2, "label": "Dummy ads group B", "ads_allowed": True},
+                    {"chat_id": CHAT_ADS_3, "label": "Dummy ads group C", "ads_allowed": True},
+                    {
+                        "chat_id": CHAT_REPLIES_ONLY,
+                        "label": "Dummy no-ads group",
+                        "ads_allowed": False,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     return cfg, db

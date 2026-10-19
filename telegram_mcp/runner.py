@@ -207,6 +207,7 @@ async def _main() -> None:
     try:
         from act_server import ALLOWED, restrict_tools
         import act_manager.tools  # noqa: F401
+
         if hasattr(mcp, "_tool_manager"):
             restrict_tools(mcp)
 
@@ -247,7 +248,9 @@ async def _main() -> None:
                         print(f"Entity cache warm failed for '{label}': {exc}", file=sys.stderr)
 
                 try:
-                    await asyncio.gather(*(_warm_client(label, cl) for label, cl in clients.items()))
+                    await asyncio.gather(
+                        *(_warm_client(label, cl) for label, cl in clients.items())
+                    )
                     print("Entity caches warmed.", file=sys.stderr)
                 except Exception as warm_exc:
                     print(f"Entity cache warm failed: {warm_exc}", file=sys.stderr)
@@ -299,6 +302,7 @@ def main() -> None:
     # Explicitly fixed allowlist is safer than annotation-based read-only mode.
     from act_server import restrict_tools
     import act_manager.tools  # noqa: F401: register exactly five ACT tools
+
     prog = os.path.basename(sys.argv[0]).lower() if sys.argv else ""
     is_pytest_runner = ("pytest" in prog) or (
         prog == "__main__.py" and "PYTEST_CURRENT_TEST" in os.environ
