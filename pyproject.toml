@@ -52,7 +52,7 @@ whisper = [
 "Bug Tracker" = "https://github.com/chigwell/telegram-mcp/issues"
 
 [tool.setuptools]
-py-modules = ["main", "migrate_session", "sanitize", "session_string_generator", "act_server", "act_cli"]
+py-modules = ["main", "migrate_session", "sanitize", "session_string_generator", "act_server", "act_cli", "act_local", "act_login"]
 packages = ["telegram_mcp", "telegram_mcp.tools", "telegram_mcp.transport", "act_manager"]
 
 [project.scripts]
